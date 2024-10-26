@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, request, Server, ServerResponse } from '
 import { Problem } from './exceptions/Problem.ts';
 import { Router, type RouterHandler } from './Router.ts';
 import { IRequest } from './http/request.ts';
+import { MongoConnection } from './mongoConnection.ts';
 
 export class HttpServer {
     private server: Server;
@@ -97,11 +98,14 @@ export class HttpServer {
         console.info("Start shutdown")
 
         //Stop accepting new requests
-        this.server.close((error) => {
+        this.server.close(async (error) => {
             if (error) {
                 console.error("Error on graceful shutdown", error);
             }
-            console.info("All pending requests are resolved")
+
+            const mongConnection = MongoConnection.getInstance();
+            await mongConnection.close();
+            console.info("All pending requests are resolved and connections are finished")
             process.exit(0);
         })
     }
