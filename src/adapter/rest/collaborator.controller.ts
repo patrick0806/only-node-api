@@ -2,6 +2,8 @@ import { ServerResponse } from "http";
 import { IRequest } from "../../bootstrap/http/request.ts";
 import { Router } from "../../bootstrap/Router.ts";
 import { CreateCollaboratorUseCase } from "../../internal/interactor/collaborator/createCollaborator.useCase.ts";
+import { CreateCollaboratorRequestDTO } from "./dtos/createCollaboratorRequest.dto.ts";
+import { InvalidParamsException } from "../../bootstrap/exceptions/invalidParams.exception.ts";
 
 export class CollaboratorController {
     private router: Router
@@ -10,9 +12,9 @@ export class CollaboratorController {
     constructor(router: Router, createCollaboratorUseCase: CreateCollaboratorUseCase) {
         this.router = router;
         this.createCollaboratorUseCase = createCollaboratorUseCase;
-        this.router.get('/', this.getCollaborators);
-        this.router.get('/:collaboratorId', this.getCollaborator);
-        this.router.post('/', this.createCollaborator);
+        this.router.get('/', this.getCollaborators.bind(this));
+        this.router.get('/:collaboratorId', this.getCollaborator.bind(this));
+        this.router.post('/', this.createCollaborator.bind(this));
     }
 
     public async getCollaborators(req: IRequest, res: ServerResponse) {
@@ -27,10 +29,14 @@ export class CollaboratorController {
         res.end(JSON.stringify(id));
     }
 
-    public async createCollaborator(req: IRequest, res: ServerResponse) {
-        const result = await this.createCollaboratorUseCase.execute(req.body as any);
-        console.log(result);
-        res.writeHead(201, 'CREATED');
-        res.end();
+    public async createCollaborator(req: IRequest<CreateCollaboratorRequestDTO>, res: ServerResponse) {
+        const body = req.body;
+
+        if (!body || !body.email || !body.password || !body.name) {
+            throw new InvalidParamsException('One or more parameters are missing in body request required params are: email, password, name')
+        }
+
+        const result = await this.createCollaboratorUseCase.execute(body);
+        res.writeHead(201, 'CREATED').end(JSON.stringify(result));
     }
 }

@@ -18,7 +18,7 @@ export class MongoConnection {
             this.client = new MongoClient(this.URI);
             await this.client.connect();
             this.db = this.client.db("approve-it");
-            console.log('Connected with Mongo database with success')
+            console.info('Connected with Mongo database with success')
         } catch (error) {
             throw new Error('Fail to connect on mongodb', { cause: error });
         }

@@ -3,21 +3,28 @@ import { MongoConnection } from "../../bootstrap/mongoConnection.ts";
 import { type ICollaboratorRepository } from "../../internal/repository/collaborator.repository.ts";
 import { Collaborator } from "../../internal/model/collaborator.model.ts";
 import { Page } from "../../internal/model/page.model.ts";
+import { CollaboratorEntity } from "./entitie/collaborator.entity.ts";
 
 export class CollaboratorMongo implements ICollaboratorRepository {
     private collection: Collection;
 
-    //TODO - create mongo entity and made the parse
     constructor() {
         const connection = MongoConnection.getInstance();
         this.collection = connection.getCollection('collaborator');
     }
 
     public async save(collaborator: Collaborator) {
+        const collaboratorEntity = CollaboratorEntity.fromModel(collaborator);
         if (!collaborator.id) {
-            return this.collection.insertOne(collaborator) as any;
+            const { insertedId } = await this.collection.insertOne(collaboratorEntity);
+            if (!insertedId) {
+                throw new Error("Fail to insert in database");
+            }
+            const createdCollaborator = await this.collection.findOne({ _id: insertedId });
+            return CollaboratorEntity.toModel(createdCollaborator as any);
         }
-        return this.collection.updateOne({ _id: new ObjectId(collaborator.id) }, collaborator) as any;
+        const updatedCollaborator = await this.collection.updateOne({ _id: collaboratorEntity._id }, collaboratorEntity);
+        return CollaboratorEntity.toModel(updatedCollaborator as any);
     };
 
     public async find(pagination: { page: number; size: number; order: "ASC" | "DESC"; }, filterParams: Record<string, any>) {
@@ -25,18 +32,31 @@ export class CollaboratorMongo implements ICollaboratorRepository {
         const skip = (page - 1) * size;
         const limit = size;
 
-        const collaborators = await this.collection.find<Collaborator>(filterParams)
+        const collaborators = await this.collection.find<CollaboratorEntity>(filterParams)
             .skip(skip)
             .limit(limit)
             .toArray();
 
         const totalElements = await this.collection.countDocuments();
         const totalPages = Math.ceil(totalElements / size);
-        return new Page(page, size, totalElements, totalPages, collaborators)
+        return new Page(page, size, totalElements, totalPages, CollaboratorEntity.toModelList(collaborators));
     }
 
     public async findById(collaboratorId: string) {
-        return this.collection.findOne<Collaborator>({ _id: new ObjectId(collaboratorId) })
+        const entity = await this.collection.findOne<CollaboratorEntity>({ _id: new ObjectId(collaboratorId) })
+        if (!entity) {
+            return null;
+        }
+        return CollaboratorEntity.toModel(entity);
+    }
+
+    public async findByEmail(email: string) {
+        const entity = await this.collection.findOne<CollaboratorEntity>({ email });
+        if (!entity) {
+            return null;
+        }
+
+        return CollaboratorEntity.toModel(entity);
     }
 
     public async delete(collaboratorId: string) {

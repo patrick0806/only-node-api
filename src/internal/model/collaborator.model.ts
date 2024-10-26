@@ -5,4 +5,5 @@ export class Collaborator {
     password: string;
     createdAt: string;
     updatedAt: string;
+    salt: string;
 }
