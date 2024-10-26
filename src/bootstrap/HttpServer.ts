@@ -1,8 +1,11 @@
 import { createServer, IncomingMessage, request, Server, ServerResponse } from 'node:http';
-import { Problem } from './exceptions/Problem.ts';
+import { Problem } from './exceptions/problem.ts';
 import { Router, type RouterHandler } from './Router.ts';
 import { IRequest } from './http/request.ts';
 import { MongoConnection } from './mongoConnection.ts';
+import { EntityInUseException } from './exceptions/entityInUse.exception.ts';
+import { EntityNotFoundException } from './exceptions/entityNotFound.exception.ts';
+import { InvalidParamsException } from './exceptions/invalidParams.exception.ts';
 
 export class HttpServer {
     private server: Server;
@@ -37,55 +40,68 @@ export class HttpServer {
             res.end();
             return;
         }
-        try {
-            const { routeHandler, pathParams, middlewares } = Router.getRouteHandler(method, url);
 
-            if (pathParams && Object.keys(pathParams).length > 0) {
-                Object.assign(req, { pathParams });
-            }
+        const { routeHandler, pathParams, middlewares } = Router.getRouteHandler(method, url);
 
-            if (routeHandler) {
+        if (pathParams && Object.keys(pathParams).length > 0) {
+            Object.assign(req, { pathParams });
+        }
+
+        if (routeHandler) {
+            try {
                 if (middlewares) {
                     let index = 0;
 
                     const next = async () => {
                         if (index < middlewares.length) {
                             const middleware = middlewares[index++];
-                            middleware(req, res, next);
+                            await middleware(req, res, next); // Use await para garantir a ordem correta
                         } else {
                             if (hasBodyInRequest) {
-                                HttpServer.handleBodyRequest(req, res, routeHandler)
+                                await HttpServer.handleBodyRequest(req, res, routeHandler); // Aguarde aqui
+                            } else {
+                                await routeHandler(req, res);
                             }
-                            await routeHandler(req, res);
                         }
                     };
 
-                    next();
+                    await next(); // Aguarde a execução do next para evitar duplicação
+                } else {
+                    if (hasBodyInRequest) {
+                        await HttpServer.handleBodyRequest(req, res, routeHandler);
+                    } else {
+                        await routeHandler(req, res);
+                    }
                 }
-
-                if (hasBodyInRequest) {
-                    HttpServer.handleBodyRequest(req, res, routeHandler)
+            } catch (error) {
+                let problem: Problem;
+                switch (true) {
+                    case error instanceof EntityInUseException:
+                        problem = error.getProblem();
+                        res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                        break;
+                    case error instanceof EntityNotFoundException:
+                        problem = error.getProblem();
+                        res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                        break;
+                    case error instanceof InvalidParamsException:
+                        problem = error.getProblem();
+                        res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                        break;
+                    default:
+                        console.error("Unexpected error happen when handle with the request. \n", error);
+                        problem = new Problem(500, "Internal server error", error.message)
+                        res.writeHead(500, 'Internal server error').end(JSON.stringify(problem));
+                        break;
                 }
-
-                await routeHandler(req, res);
-
-                return;
-            } else {
-                const problem = new Problem(404, 'Not found', 'Route not found')
-                res.writeHead(404, 'Not found')
-                res.end(JSON.stringify(problem))
-                return;
             }
-        } catch (error: any) {
-            console.error("Unexpected error happen when handle with the request. \n", error);
-            const problem = new Problem(500, "Internal server error", error.message)
-            res.writeHead(500, 'Internal server error');
-            res.end(JSON.stringify(problem));
+        } else {
+            const problem = new Problem(404, 'Not found', 'Route not found')
+            res.writeHead(404, 'Not found')
+            res.end(JSON.stringify(problem))
+            return;
         }
 
-        res.on('finish', () => {
-            console.log("vim aqui depois da req");
-        })
     }
 
     private registerShutdownHandlers() {
@@ -122,21 +138,45 @@ export class HttpServer {
         })
     }
 
-    private static handleBodyRequest(req: IRequest, res: ServerResponse<IRequest>, handler: RouterHandler) {
+    private static async handleBodyRequest(req: IRequest, res: ServerResponse, handler: RouterHandler) {
         let body: any = [];
         req.on('data', (chunk) => {
             body.push(chunk)
-        }).on('end', async () => {
+        })
+
+        req.on('end', () => {
             body = Buffer.concat(body).toString()
             try {
                 body = JSON.parse(body);
                 Object.assign(req, { body })
             } catch (error) {
                 const problem = new Problem(422, 'Unprocessable entity', 'Invalid json');
-                res.writeHead(422, 'Unprocessable entity')
-                res.end(JSON.stringify(problem))
+                return res.writeHead(422, 'Unprocessable entity').end(JSON.stringify(problem))
             }
-            await handler(req, res);
+
+            handler(req, res)
+                .catch(error => {
+                    let problem: Problem;
+                    switch (true) {
+                        case error instanceof EntityInUseException:
+                            problem = error.getProblem();
+                            res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                            break;
+                        case error instanceof EntityNotFoundException:
+                            problem = error.getProblem();
+                            res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                            break;
+                        case error instanceof InvalidParamsException:
+                            problem = error.getProblem();
+                            res.writeHead(problem.getStatus(), problem.getTitle()).end(JSON.stringify(problem));
+                            break;
+                        default:
+                            console.error("Unexpected error happen when handle with the request. \n", error);
+                            problem = new Problem(500, "Internal server error", error.message)
+                            res.writeHead(500, 'Internal server error').end(JSON.stringify(problem));
+                            break;
+                    }
+                });
         })
     }
 }

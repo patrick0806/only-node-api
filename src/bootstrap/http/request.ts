@@ -1,6 +1,6 @@
 import { IncomingMessage } from "node:http";
 
-export class IRequest extends IncomingMessage {
-    body?: Record<string, unknown>;
+export class IRequest<T = {}> extends IncomingMessage {
+    body?: T;
     pathParams?: any;
 }

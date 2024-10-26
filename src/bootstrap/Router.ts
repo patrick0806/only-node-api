@@ -1,8 +1,8 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 import { IRequest } from "./http/request.ts";
 
-export type Middleware = (req: IRequest, res: ServerResponse<IncomingMessage>, next: () => void) => void;
-export type RouterHandler = (req: IRequest, res: ServerResponse<IncomingMessage>) => any;
+export type Middleware = (req: IRequest<any>, res: ServerResponse<IncomingMessage>, next: () => void) => void;
+export type RouterHandler = (req: IRequest<any>, res: ServerResponse<IncomingMessage>) => any;
 type GetRouterHandler = { routeHandler: RouterHandler | null, middlewares: Middleware[] | null, pathParams: Record<string, string> | null };
 
 export class Router {
