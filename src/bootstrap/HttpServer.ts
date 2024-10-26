@@ -18,6 +18,10 @@ export class HttpServer {
         })
     }
 
+    public close() {
+        this.server.close();
+    }
+
     private async requestHandler(req: IRequest, res: ServerResponse<IncomingMessage>) {
         const { method, url } = req;
         const hasBodyInRequest = method === "POST" || method === "PUT" || method === "PATCH";
@@ -87,7 +91,6 @@ export class HttpServer {
         process.on('SIGINT', () => this.gracefulShutdown());
         //process.on('SIGTERM', () => this.gracefulShutdown());
         //process.on('SIGQUIT', () => this.gracefulShutdown());
-        //TODO - move from here
     }
 
     private gracefulShutdown() {
@@ -109,7 +112,7 @@ export class HttpServer {
             console.info("Any route mapped yet");
             return;
         }
-        routes.forEach((_, path) => {
+        routes.forEach(({ pathParams }, path) => {
             const [method, route] = path.split('-');
             console.info(`Mapped route [${method}]: ${route}`);
         })

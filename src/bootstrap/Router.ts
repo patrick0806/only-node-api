@@ -49,8 +49,9 @@ export class Router {
             return '(\\w+)'; // Substitui o parâmetro por uma expressão regular
         });
 
+        const formatedPath = path === '/' ? method + '-' + this.basePath : method + '-' + this.basePath + regexPath;
         return {
-            routeRegex: path === '/' ? method + '-' + this.basePath : method + '-' + this.basePath + regexPath,
+            routeRegex: formatedPath.replaceAll("//", '/'),
             pathParams,
         };
     }
